@@ -31,3 +31,16 @@ Examples/
 *.hex
 
 .vscode
+
+
+
+# LaTex ignore
+*.aux
+*.bbl
+*.log
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.toc
+*.xdv

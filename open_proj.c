@@ -766,7 +766,7 @@ void SysTick_Handler(void) {
     if (digiseg_display_couter != 0)
         digiseg_display_couter--;
     else {
-        digiseg_display_couter = 2 ;
+        digiseg_display_couter = 1 ;
         digiseg_display_status = 1;
     }
 		
