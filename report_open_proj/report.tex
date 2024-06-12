@@ -3,6 +3,7 @@
 \usepackage{amsmath, amsthm, amssymb, bm, graphicx, hyperref, mathrsfs, graphicx, float, subfigure, caption, makecell, longtable,framed,booktabs}
 \usepackage[dvipsnames]{xcolor}
 \usepackage{listings}
+\usepackage{placeins}
 \renewcommand{\lstlistingname}{Code}
 \lstset{
     language=C++, % 设置语言
@@ -48,7 +49,13 @@
     \subsection{功能设计}
     该时钟具有四种模式：普通模式、时间设置模式、闹钟设置模式和秒表模式。
     按键\verb|USR_SW1|和\verb|USR_SW2|为交互按键，按下按键以进行各种操作，且按下时伴有蜂鸣器音，
-    \verb|LED_M0|~\verb|LED_M3|为状态指示灯。
+    \verb|LED_M0|~\verb|LED_M3|为状态指示灯。如图\ref{fig:s800}。
+    \begin{figure}[h]
+        \centering
+        \includegraphics[width=0.8\textwidth]{./img/s800.png}
+        \caption{功能设计}
+        \label{fig:s800}
+    \end{figure}
     \subsubsection{普通模式}
     开机后处于普通模式，\verb|LED_M0|亮起指示当前为普通模式，
     此时数码管以“HH-MM-SS”形式显示当前时间。
@@ -65,10 +72,11 @@
     指示当前闹钟已经设置。
 
     当时间到达闹钟设置时间时，蜂鸣器将响起，同时LED1闪烁。结束后LED1不再亮起，指示当前闹钟已无闹钟。
+    在响铃时时钟能正常继续计时。
     \subsubsection{秒表模式}
     在普通模式下长按\verb|USR_SW1|进入秒表模式，\verb|LED_M3|亮起指示当前为秒表模式，
     此时数码管时间显示为0，再短按\verb|USR_SW1|开始计时，数码管上显示“分-秒-毫秒”。在计时开始时，
-    短按\verb|USR_SW1|暂停计时，并通过UART发送当前计时时间，短按\verb|USR_SW2|会发送按下时的计时时间，且计时保持进行；
+    短按\verb|USR_SW1|暂停计时，并通过UART发送当前计时时间，短按\verb|USR_SW2|会发送按下时的计时时间，实现计次功能，且计时保持进行；
     当计时暂停时，长按\verb|USR_SW2|将计时清零，长按\verb|USR_SW1|将退出，回到普通模式。
     \subsubsection{UART命令控制}
     除了按键，还可通过UART串口发送命令的方式进行控制，此方式不受当前模式的影响。
@@ -79,21 +87,87 @@
         \item 发送“GETTIME”：返回当前时间。
     \end{enumerate}
     \subsection{功能实现}
+    
+    系统框图如图\ref{fig:system}所示。系统由GPIO按键和UART串口通信
+    来进行人机交互，通过I2C扩展IO来驱动数码管和蜂鸣器，并通过GPIO和I2C上的
+    一系列LED来指示系统状态。
     \begin{figure}[h]
         \centering
         \includegraphics[width=0.8\textwidth]{./img/system.png}
         \caption{系统框图}
         \label{fig:system}
     \end{figure}
-    系统框图如图\ref{fig:system}所示。系统由GPIO按键和UART串口通信
-    来进行人机交互，通过I2C扩展IO来驱动数码管和蜂鸣器，并通过GPIO和I2C上的
-    一系列LED来指示系统状态。
-
-
-
     
+    \subsubsection{计时与显示}
+    在程序中定义了时钟结构体类型,包含时分秒三个字段，用于存储时间。
 
-    \subsection{结果展示}
+    基本的计时通过Systick来实现，设定1ms的Systick中断周期，当中断计数到1000时，即1s，
+    使标志位有效，在主循环中对时间进行更新。如图\ref{fig:systick}。
+
+    时钟的显示通过I2C驱动数码管来实现，通过I2C发送数据到数码管，数码管显示当前时间。
+    为了数码管不同位显示不同内容，需通过快速切换位选和段选来，可通过SysTick中断来实现。
+
+   
+
+    \subsubsection{UART控制}
+    在UART接收中断中，对接收的命令进行处理，根据命令进行相应的操作。如图\ref{fig:uart}。
+
+    \subsubsection{模式切换}
+    模式切换通过按键实现，在Systick中断中定时扫描按键状态，进行消抖等处理，
+    根据按键状态进行模式切换。如图\ref{fig:SW1}，\ref{fig:SW2}。
+   
+
+    \subsubsection{主循环处理}
+    在主循环中，如图\ref{fig:main}，
+    根据计时标志，更新当前时间；判断闹钟是否到达，若到达则响铃；
+    根据当前模式，根据当前状态，进行相关操作。
+
+    \begin{figure}[t]
+        \centering
+        \subfigure[]{
+        \includegraphics[width=0.4\textwidth]{./img/flowchart_systick.png}
+        \label{fig:systick}}
+        \hfil
+        \subfigure[]{
+        \includegraphics[width=0.5\textwidth]{./img/flowchart_uart.png}
+        \label{fig:uart}}
+        \caption{(a)Systick流程图：进行计数以提供时钟和秒表的计时，并定时进行按键的扫描.
+        (b)uart流程图：对接收的命令进行处理，根据命令进行相应的操作.} 
+
+    \end{figure}
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.9\textwidth]{./img/flowchart_SW1.png}
+        \caption{SW1扫描流程图：根据按键行为确定模式，和相关操作.} 
+        \label{fig:SW1}
+    \end{figure}
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.8\textwidth]{./img/flowchart_SW2.png}
+        \caption{SW2扫描流程图：根据按键行为确定模式，和相关操作.} 
+        \label{fig:SW2}
+    \end{figure}
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.9\textwidth]{./img/flowchart_main.png}
+        \caption{主循环程序流程图.} 
+        \label{fig:main}
+    \end{figure}
+
+
+    \FloatBarrier
+    \subsection{结果与展望}
+    项目能够正常运行，实现设计的基本功能，但仍有改进的空间：
+    \begin{enumerate}
+        \item 时钟显示：数码管显示效果不够好，有残影，可进一步优化扫描延时参数；
+        \item 模式切换：GPIO按键较少，可考虑采用I2C扩展的按键，通过I2C中断控制，可以丰富功能并方便操作；
+        \item 闹钟功能：目前只能设置一次闹钟，可考虑增加多次闹钟设置功能；
+        \item 丰富效果：可以利用板上的步进电机资源，以步进电机作为秒针显示当前秒数，增强显示效果。
+    \end{enumerate}
+
      
 \end{document}
 
